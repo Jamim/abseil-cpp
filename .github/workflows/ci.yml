@@ -1,0 +1,78 @@
+name: CI
+
+on:
+  - push
+  - pull_request
+
+env:
+  FORCE_COLOR: 1
+  CFLAGS: -march=native -O2 -pipe
+  CXXFLAGS: -march=native -O2 -pipe
+
+jobs:
+  test:
+    name: '🧪 ${{ matrix.os }}, ${{ matrix.c_compiler }}'
+    runs-on: ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, windows-latest, macos-latest]
+        c_compiler: [gcc, clang, cl]
+        include:
+          - os: ubuntu-latest
+            c_compiler: gcc
+            cxx_compiler: g++
+          - os: ubuntu-latest
+            c_compiler: clang
+            cxx_compiler: clang++
+          - os: windows-latest
+            c_compiler: cl
+            cxx_compiler: cl
+          - os: macos-latest
+            c_compiler: clang
+            cxx_compiler: clang++
+        exclude:
+          - os: ubuntu-latest
+            c_compiler: cl
+          - os: windows-latest
+            c_compiler: gcc
+          - os: windows-latest
+            c_compiler: clang
+          - os: macos-latest
+            c_compiler: cl
+          - os: macos-latest
+            c_compiler: gcc
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: 📝 Set reusable strings
+        # Turn repeated input strings (such as the build output dir) into step outputs.
+        # These step outputs can be used throughout the workflow file.
+        id: strings
+        shell: bash
+        run: |
+          echo "build-output-dir=${{ github.workspace }}/build" >> "$GITHUB_OUTPUT"
+
+      - name: 🔧 Configure CMake
+        run: >
+          cmake -B ${{ steps.strings.outputs.build-output-dir }}
+          -DCMAKE_C_COMPILER=${{ matrix.c_compiler }}
+          -DCMAKE_CXX_COMPILER=${{ matrix.cxx_compiler }}
+          -DCMAKE_BUILD_TYPE=Debug
+          -DBUILD_TESTING=ON
+          -DABSL_BUILD_TESTING=ON
+          -DABSL_USE_GOOGLETEST_HEAD=ON
+          -DCMAKE_CXX_STANDARD=17
+          -S ${{ github.workspace }}
+
+      - name: 👷 Build
+        # Note that --config is needed because the default Windows
+        # generator is a multi-config generator (Visual Studio generator).
+        run: cmake --build ${{ steps.strings.outputs.build-output-dir }} --config Debug
+
+      - name: 🧪 Test
+        working-directory: ${{ steps.strings.outputs.build-output-dir }}
+        # Note that --build-config is needed because the default Windows
+        # generator is a multi-config generator (Visual Studio generator).
+        # See https://cmake.org/cmake/help/latest/manual/ctest.1.html for more detail
+        run: ctest --build-config Debug
